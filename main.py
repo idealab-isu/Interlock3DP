@@ -4,6 +4,8 @@ import re
 from collections import defaultdict
 from copy import deepcopy
 import sys
+import os
+import argparse
 import Utilities
 
 flat = trimesh.Trimesh()
@@ -82,35 +84,24 @@ def FindValidNewElements(element, end, layer):
     except:
         exit()
 
-
-def ElementsNotSeen(elements, flatClosed, flatHeap):
-    filterElements = []
-    for element in elements:
-        flatElement = Utilities.Flatten2DElement(element.toPoint())
-        if(not(flatElement in flatClosed) and not(flatElement in flatHeap)):
-            filterElements.append(element)
-    return filterElements
-
 def CreateLayerPath(voxelized_layer, coords):
+    # A* from start to end. The heap has no size limit and the search runs until the end is
+    # reached or the layer is exhausted. A cell is added once: cells already open or closed
+    # are not added again.
     end = Utilities.Element(coords[1][0], coords[1][1])
     start = Utilities.Element(coords[0][0], coords[0][1], end)
-    heap = Utilities.MinHeap(500)
+    heap = Utilities.MinHeap()
     heap.insert(start)
-    closed = []
-    current = 0
-    iter = 0
+    seen = {(start.x, start.y)}
+    current = start
     while(heap.size > 0):
-        iter += 1
-        if(iter == 10000):
-            break
         current = heap.remove()
-        closed.append(current)
         if(current == end):
             break
-        newElements = FindValidNewElements(current, end, voxelized_layer)
-        flatClosed = list(map(Utilities.Flatten2DElement, list(map(lambda e: e.toPoint(), closed))))
-        flatHeap = list(map(Utilities.Flatten2DElement, list(map(lambda e: e.toPoint(), filter(lambda e: isinstance(e, Utilities.Element), heap.Heap)))))
-        heap.batchInsert(ElementsNotSeen(newElements, flatClosed, flatHeap))
+        for element in FindValidNewElements(current, end, voxelized_layer):
+            if (element.x, element.y) not in seen:
+                seen.add((element.x, element.y))
+                heap.insert(element)
     return current
 
 def SplitLayer(layer, layer_indices_with_margin):
@@ -338,7 +329,7 @@ def FindBoundary(voxelized_intersection, shape):
 
     return boundary
 
-def RemeshIntersection(mesh1, mesh2, voxel_size_inner,output_directory):
+def RemeshIntersection(mesh1, mesh2, voxel_size_inner, output_directory):
     voxel_size = voxel_size_inner * 5
     intersection_mesh = trimesh.boolean.intersection([mesh1, mesh2])
     voxelized_intersection = trimesh.voxel.creation.voxelize(intersection_mesh, voxel_size)
@@ -368,7 +359,7 @@ def RemeshIntersection(mesh1, mesh2, voxel_size_inner,output_directory):
                 for y in [-1,0,1]:
                     list_margin.append(ele + [x,y,0])
         filtered_layer_with_margin_dictionary[key].extend(list(map(Utilities.Flatten3DElement, list_margin)))
-        filtered_layer_with_margin_dictionary[key] = list(set(filtered_layer_with_margin_dictionary[key]))
+        filtered_layer_with_margin_dictionary[key] = sorted(set(filtered_layer_with_margin_dictionary[key]))
 
     final_mesh_dictionary = {}
 
@@ -417,37 +408,58 @@ def RemeshIntersection(mesh1, mesh2, voxel_size_inner,output_directory):
 
     inter1 = trimesh.boolean.union(mesh1AdditionList)
     inter1 = trimesh.boolean.intersection([inter1, intersection_mesh])
-    inter1.export(output_directory + "i1.obj")
-    diff1.export(output_directory + "d1.obj")
+    inter1.export(os.path.join(output_directory, "i1.obj"))
+    diff1.export(os.path.join(output_directory, "d1.obj"))
 
 
     inter2 = trimesh.boolean.union(mesh2AdditionList)
     inter2 = trimesh.boolean.intersection([inter2, intersection_mesh])
-    inter2.export(output_directory + "i2.obj")
-    diff2.export(output_directory + "d2.obj")
+    inter2.export(os.path.join(output_directory, "i2.obj"))
+    diff2.export(os.path.join(output_directory, "d2.obj"))
+
+    # The final parts: each input minus the overlap, plus its share of the overlap.
+    for name, diff, inter in [("S1.stl", diff1, inter1), ("S2.stl", diff2, inter2)]:
+        trimesh.boolean.union([diff, inter]).export(os.path.join(output_directory, name))
 
 
 
-if len(sys.argv) < 5:
-    print("Needs all required input.\nInput file 1, input file 2, output directory, voxel size")
-    quit()
+def LoadStamp(path):
+    if not os.path.isfile(path):
+        sys.exit(f"error: stamp {path} not found")
+    stamp = trimesh.load(path, force='mesh')
+    if not stamp.is_watertight:
+        sys.exit(f"error: stamp {path} is not watertight")
+    if stamp.bounds[0].min() < -1e-6 or stamp.bounds[1].max() > 1 + 1e-6:
+        sys.exit(f"error: stamp {path} must lie in the unit cube [0, 1]^3")
+    return stamp
 
-input1,input2,output_directory,voxel_size=sys.argv[1:5]
 
-try:
-    voxel_size=float(voxel_size)
-except:
-    print("Fourth parameter must be a float")
-    quit()
+parser = argparse.ArgumentParser(
+    description="Split the overlap of two solids into two interlocking halves.")
+parser.add_argument("input1", help="first solid (any mesh format trimesh reads)")
+parser.add_argument("input2", help="second solid; must overlap the first")
+parser.add_argument("output_directory", help="created if it does not exist")
+parser.add_argument("feature_size", type=float,
+                    help="stamp feature size; one voxel is 5 x feature_size")
+parser.add_argument("stamps", nargs="*", metavar="stamp",
+                    help="optional custom stamps, all four or none: flat flatAlt corner cornerAlt "
+                         "(watertight meshes in the unit cube [0, 1]^3)")
+args = parser.parse_args()
+if args.feature_size <= 0:
+    parser.error("feature_size must be positive")
+if len(args.stamps) not in (0, 4):
+    parser.error("give all four stamps (flat flatAlt corner cornerAlt) or none")
 
-if len(sys.argv) < 9:
+if args.stamps:
+    flat, flatAlt, corner, cornerAlt = map(LoadStamp, args.stamps)
+else:
     MakeFlatInter()
     MakeCornerInter()
-elif len(sys.argv) == 9:
-    flat,flatAlt,corner,cornerAlt=sys.argv[5:9]
-else:
-    quit()
 
-mesh1 = trimesh.load(input1)
-mesh2 = trimesh.load(input2)
-RemeshIntersection(mesh1, mesh2, voxel_size, output_directory)
+os.makedirs(args.output_directory, exist_ok=True)
+for path in (args.input1, args.input2):
+    if not os.path.isfile(path):
+        sys.exit(f"error: input {path} not found")
+mesh1 = trimesh.load(args.input1, force='mesh')
+mesh2 = trimesh.load(args.input2, force='mesh')
+RemeshIntersection(mesh1, mesh2, args.feature_size, args.output_directory)

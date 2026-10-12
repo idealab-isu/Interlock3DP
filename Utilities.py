@@ -1,11 +1,10 @@
 import numpy as np
 
 class MinHeap:
-    def __init__(self, maxsize): 
-        self.maxsize = maxsize 
+    # Binary min-heap of Elements ordered by sortKey(). It grows as needed; there is no size limit.
+    def __init__(self): 
         self.size = 0
-        self.Heap = [0]*(self.maxsize + 1) 
-        self.Heap[0] = -1 * self.maxsize 
+        self.Heap = []
         self.FRONT = 0
 
     def parent(self, pos): 
@@ -18,7 +17,7 @@ class MinHeap:
         return 2 * (pos + 1)
     
     def value(self, pos): 
-        return self.Heap[pos].getValue()
+        return self.Heap[pos].sortKey()
     
     def leftChildExists(self, pos): 
         return (pos + 1) * 2 - 1 < self.size
@@ -58,11 +57,10 @@ class MinHeap:
                 self.minHeapifyDown(self.parent(pos))
             
     def insert(self, element):
-        if self.size + 1 > self.maxsize:
-            print("No room for element in heap")
-            return
-        
-        self.Heap[self.size] = element
+        if self.size == len(self.Heap):
+            self.Heap.append(element)
+        else:
+            self.Heap[self.size] = element
         self.size += 1
 
         parent_pos = self.parent(self.size - 1)
@@ -134,6 +132,10 @@ class Element:
 
     def getValue(self):
         return self.value + self.steps
+
+    def sortKey(self):
+        # A* cost, ties broken lexicographically: smaller x first, then smaller y.
+        return (self.getValue(), self.x, self.y)
     
 def Flatten2DElement(value):
     return f'({value[0]},  {value[1]})'

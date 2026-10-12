@@ -64,17 +64,67 @@ The halves of the overlap (`i1 + i2`) always summed exactly to the intersection 
    is not in that repository or this one.
 6. **The cut hugs an edge on rectangular overlaps.** The farthest boundary pair are opposite corners, and the shortest A* path follows the overlap's border, so one part can get very little of the overlap (12% in the narrow test). This follows from the method rather than being a bug, but it affects how strong the joint is.
 
+## Changes after this report (2026-10-12)
+
+The report above describes the code as verified. These changes were made afterwards. The method is
+unchanged except for the tie-break (item 3).
+
+1. **Fixed: the output changed from run to run.** `SplitLayer` starts its flood fill from the first
+   entry of `list(set(...))`, a set of strings. Python randomizes string hashing per process, so
+   that order, and with it which side of the cut went to which part, varied between runs. (Two runs
+   of the cube test at 0.4 gave different `i1.obj` files.) It is now `sorted(set(...))`. The tables
+   above came from single runs of the old code, so a rerun gives different shares.
+2. **Fixed: A* limits (issue 4).** The heap now grows as needed instead of dropping entries
+   past 500, and the 10,000-iteration cap is removed. The open and closed lists are kept as one set of
+   seen cells instead of being rebuilt as string lists on every step. With the old tie-break and
+   determinism fix 1, the output is byte-identical to the old code on all six test cases below.
+3. **Changed: lexicographic tie-break (issue 4),** as the paper describes: equal A* costs are ordered
+   by x, then y. This moves the cut on four of the six test cases.
+4. **Fixed: issues 1-3.** `requirements.txt` pins the working versions. The four custom stamps are
+   loaded and checked: each must exist, be watertight and lie in the unit cube. They give exactly the
+   built-in result when passed the built-in stamps. `S1.stl` and `S2.stl` (the final parts) are
+   written.
+5. **Command line:** `argparse` usage and errors (non-zero exit), the output directory is created if
+   needed, and paths are joined with `os.path.join` (no trailing separator needed).
+
+Not changed, by decision (the repository stays the paper's reference): the endpoint choice, the
+product continuity weight, and the edge-following cut (issue 6).
+
+Also not changed: `layers.sort()` in `RemeshIntersection` sorts the layer keys as strings, so with 10
+or more layers they are processed as 0, 1, 10, 11, ..., 2, ... and the continuity weight compares a
+layer with the previous one in that order, not the one below it.
+
+### Results with the changes
+
+Six cases, all with `PYTHONHASHSEED` 1 and 2 (identical output for both):
+
+| Test | Feature size | Watertight, 1 body each | S1 ∩ S2 | S1 + S2 = union(inputs) |
+|---|---|---|---|---|
+| Cubes | 0.4 | yes | 0 | 1760.000 = 1760.000 |
+| Cubes | 0.2 | yes | 0 | 1760.000 = 1760.000 |
+| Cubes | 0.1 | yes | 0 | 1760.000 = 1760.000 |
+| Narrow overlap | 0.2 | yes | 0 | 2140.000 = 2140.000 |
+| Plates `[0,40]²×[0,4]` and `[3..43, 2..42, 1..5]` | 0.2 | yes | 0 | 8582.000 = 8582.000 |
+| Cylinders r 12, h 6, offset (9, 4, 2) | 0.2 | yes | 0 | 4530.762 = 4530.762 |
+
+Dense sampling, as above:
+
+| Test | A only | B only | Both | Neither | Columns with z-label change | z-transitions |
+|---|---|---|---|---|---|---|
+| Cubes, 0.4 | 71.8% | 28.2% | 0 | 0 | 9 / 750 | 72 |
+| Cubes, 0.2 | 64.5% | 35.5% | 0 | 0 | 36 / 3000 | 576 |
+| Narrow, 0.2 | 83.3% | 16.7% | 0 | 0 | 144 / 3000 | 2880 |
+
 ## Reproducing
 
 ```bash
 conda create -p ./py312 python=3.12
-./py312/python -m pip install "numpy<2" "trimesh==4.1.4" rtree manifold3d scipy
+./py312/python -m pip install -r requirements.txt
 
 # make test inputs
 python -c "import trimesh; trimesh.creation.box(bounds=[[0,0,0],[10,10,10]]).export('a.stl'); trimesh.creation.box(bounds=[[5,4,2],[15,14,12]]).export('b.stl')"
 
-mkdir out
-python main.py a.stl b.stl out/ 0.2
-python verification/check_outputs.py out/ a.stl b.stl          # watertight / overlap / volume, writes S1.stl, S2.stl
+python main.py a.stl b.stl out 0.2
+python verification/check_outputs.py out/ a.stl b.stl          # watertight / overlap / volume, rewrites S1.stl, S2.stl
 python verification/dense_sample.py out/ 0.2 a.stl b.stl       # gap/overlap sampling + interlock z-transitions
 ```
