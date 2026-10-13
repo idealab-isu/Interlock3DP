@@ -96,17 +96,6 @@ departures from the paper's text are deliberate and described in `VERIFICATION.m
 - **on rectangular overlaps the cut follows an edge,** so one part can get little of the overlap
   (17 % in the narrow-overlap test).
 
-The C++ implementation below offers a stepped diagonal cut and other interface patterns.
-
-## C++ implementation
-
-GPView 2.2 ([idealab-isu/GPView2.0](https://github.com/idealab-isu/GPView2.0)) has a C++ implementation
-of the method, `gpview::interlock`. It has:
-
-- an `interlock_export` command-line tool and an Interlock tab in the viewer;
-- a mode that reproduces this code's cut and stamps (`--paper`);
-- other interface patterns (gyroid by default) and a stepped diagonal cut.
-
 ## License
 
 MIT; see `LICENSE`.
