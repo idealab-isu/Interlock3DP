@@ -11,7 +11,7 @@ This is the reference implementation for:
 > A. Chambers, A. Krishnamurthy, *"Designing Interlocking Interfaces of Complex Geometries for
 > Multimaterial 3D Printing"*, Manufacturing Letters 49 (2026) 1215–1225 (NAMRC 54).
 
-## How it works
+## Method
 
 1. **Overlap.** The intersection Ω of the two input solids is computed and voxelized.
 2. **Cut each layer.** In every voxel layer, an A* path between the two farthest boundary points
