@@ -366,7 +366,7 @@ def RemeshIntersection(mesh1, mesh2, voxel_size_inner, output_directory):
     previous_z_key = None
     
     layers = list(filtered_boundary_dictionary.keys())
-    layers.sort()
+    layers.sort(key=int)  # the keys are strings; sort them as numbers so each layer follows the one below it
 
 
     for z in layers:

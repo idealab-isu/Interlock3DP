@@ -86,13 +86,16 @@ unchanged except for the tie-break (item 3).
    written.
 5. **Command line:** `argparse` usage and errors (non-zero exit), the output directory is created if
    needed, and paths are joined with `os.path.join` (no trailing separator needed).
+6. **Fixed: layer order.** The layer keys are strings, and `layers.sort()` in `RemeshIntersection`
+   sorted them as text, so overlaps more than 10 layers tall were processed as 0, 1, 10, 11, ..., 2, ...
+   and the continuity weight compared a layer with the previous one in that order instead of the
+   layer below it. It is now `layers.sort(key=int)`. Overlaps of 10 layers or fewer are unaffected
+   (byte-identical output). On the two taller test cases (cubes at 0.1, 17 layers; narrow overlap)
+   the files change only in triangle order: the parts are geometrically identical (symmetric
+   difference 0), so every number below holds before and after this fix.
 
 Not changed, by decision (the repository stays the paper's reference): the endpoint choice, the
 product continuity weight, and the edge-following cut (issue 6).
-
-Also not changed: `layers.sort()` in `RemeshIntersection` sorts the layer keys as strings, so with 10
-or more layers they are processed as 0, 1, 10, 11, ..., 2, ... and the continuity weight compares a
-layer with the previous one in that order, not the one below it.
 
 ### Results with the changes
 
